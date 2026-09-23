@@ -1,12 +1,13 @@
-import chromadb
-from rag_eval_project.retrieval import retrieve,retrieve_chroma,client
+"""Generation stage: builds a grounded prompt from retrieved chunks, calls the
+LLM, and wires retrieval + prompting + generation into one pipeline entry point.
+"""
+from rag_eval_project.retrieval import retrieve_chroma, client
 
 
 def build_prompt(query: str, chunks: list[dict]) -> tuple[str, list[dict]]:
-    context = "\n\n".join(
-        f"[{i+1}] {chunk['text']}"
-        for i, chunk in enumerate(chunks)
-    )
+    """Build a grounded prompt from retrieved chunks, plus a parallel
+    chunks_used list for traceability (kept out of the prompt itself)."""
+    context = "\n\n".join(f"[{i+1}] {chunk['text']}" for i, chunk in enumerate(chunks))
 
     prompt = (
         f"Context:\n{context}\n\n"
@@ -22,27 +23,22 @@ def build_prompt(query: str, chunks: list[dict]) -> tuple[str, list[dict]]:
     return prompt, chunks_used
 
 
-def generate_answer(prompt:str) -> str:
+def generate_answer(prompt: str) -> str:
+    """Call the LLM with a fully-built prompt and return the answer text."""
     response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role": "user", "content": prompt}],)
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
     return response.choices[0].message.content
 
+
 def answer_question(query: str, k: int = 3) -> dict:
-    # 1. retrieve chunks for query, using k
-    results= retrieve_chroma(query,k)
+    """Full pipeline: retrieve -> build prompt -> generate answer.
 
-    # 2. build the prompt from query + chunks
-    prompt,chunks_used = build_prompt(query,results)
-    # 3. generate the answer from the prompt
-    answer=generate_answer(prompt)
-    # 4. return something structured — think about what a caller
-    #    (a script, an evaluation harness, a future UI) would need
-    result_dict={"answer": answer,"chunks_used":chunks_used}
-    return result_dict
-
-
-
-
-
-
+    Returns {"answer": str, "chunks_used": list[dict]} so callers (scripts,
+    eval harnesses, a future UI) get both the answer and traceability info.
+    """
+    results = retrieve_chroma(query, k)
+    prompt, chunks_used = build_prompt(query, results)
+    answer = generate_answer(prompt)
+    return {"answer": answer, "chunks_used": chunks_used}

@@ -35,7 +35,6 @@ def run_eval(eval_queries: list[dict]) -> list[dict]:
 
 
 if __name__ == "__main__":
-    # import or paste your eval_queries list here
     eval_queries = EVAL_QUERIES
 
     results = run_eval(eval_queries)

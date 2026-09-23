@@ -1,3 +1,9 @@
+"""Retrieval stage: embed a query, score it against the stored corpus, and
+return the top-k most similar chunks. Two implementations are provided —
+retrieve() (manual, brute-force NumPy) and retrieve_chroma() (Chroma's
+native HNSW query) — verified to produce identical results at this
+collection size, so either can be trusted going forward.
+"""
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -28,18 +34,14 @@ def retrieve(query: str, k: int) -> list[dict]:
     This is the from-scratch mechanism Chroma's collection.query() wraps.
     See retrieve_chroma() for the framework-native equivalent.
     """
-    # 1. Embed the query — same model as the corpus.
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=query
     )
     query_vec = np.array(response.data[0].embedding)
 
-    # 2. Pull ALL stored chunks back from Chroma: embeddings + documents + metadatas.
     result = collection.get(include=["embeddings", "documents", "metadatas"])
 
-    # 3. Walk all three parallel lists together, one chunk at a time,
-    #    scoring each against the query.
     pairs = []
     for embedding, document, metadata, chunk_id in zip(
         result["embeddings"], result["documents"], result["metadatas"], result["ids"]
@@ -53,10 +55,7 @@ def retrieve(query: str, k: int) -> list[dict]:
             "id": chunk_id,
         })
 
-    # 4. Sort descending by score, take the top k.
     ranked = sorted(pairs, key=lambda pair: pair["score"], reverse=True)
-
-    # 5. Return the top k.
     return ranked[:k]
 
 
@@ -74,7 +73,7 @@ def retrieve_chroma(query: str, k: int) -> list[dict]:
     query_vec = np.array(response.data[0].embedding)
 
     chroma_result = collection.query(
-        query_embeddings=[query_vec.tolist()],  # Chroma expects a plain list, not a numpy array
+        query_embeddings=[query_vec.tolist()],
         n_results=k,
         include=["documents", "metadatas", "distances"],
     )
